@@ -7,6 +7,7 @@ A browser Snake game for 2Shay in one self-contained `index.html`. Every move ru
 buffer, O(1) free-cell set, neighbour lookup table), allocates nothing, and redraws at most three cells. It has a
 never-crash autopilot (one loop through every cell, with safe shortcuts), a live readout, a benchmark, and touch
 controls for phones (swipe, an on-screen pad, a sideways layout).
+Public repo: https://github.com/2Shay96/O1-Snake (MIT licence).
 Sister project: `1-billion-games-of-snake\`, the same autopilot on a graphics card (https://github.com/2Shay96/1-Billion-games-of-Snake).
 
 ## How to run

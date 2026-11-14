@@ -2,12 +2,13 @@
 
 **Updated:** 2026-11-14 by Claude (Code tab, Windows cloud PC)
 **Working folder / branch:** `%USERPROFILE%\Desktop\VibeCoding\snake\` / `main`
-**GitHub:** not published. Committed locally and ready; waiting for 2Shay's word (see "Next action").
+**GitHub:** https://github.com/2Shay96/O1-Snake (public, MIT licence; published 14 Nov 2026 through GitHub Desktop on 2Shay's word)
 
 ## Task and current state
 O(1) Snake: a playable, single-file browser Snake where every move costs the same, with a never-crash autopilot.
 On 14 Nov 2026 2Shay asked for it to be tested on phones, tidied up and given an open-source licence so it can be shared.
-Done: phone layout and touch fixes, an automated check, a public README, the MIT licence, the first commit.
+Done: phone layout and touch fixes, an automated check, a public README, the MIT licence, and the public repo.
+The two Snake READMEs link to each other.
 
 ## Changes and checks (14 Nov 2026)
 - `tests/phone-check.ps1` (new): drives Chrome or Edge in phone emulation. 14 screen sizes, real touch input (taps,
@@ -37,7 +38,9 @@ Done: phone layout and touch fixes, an automated check, a public README, the MIT
   not exist for Windows. The phone results above are Chrome's emulation.
 - Could not be checked in emulation: iPhone address-bar resizing, notch areas when held sideways, and whether Safari
   honours `touch-action:none` on the board the way Chrome does.
-- Not tested on GitHub Pages.
+- Not hosted anywhere: people download `index.html` and open it. GitHub Pages is not switched on and not tested.
+- 2Shay said on 14 Nov 2026 that Firefox and Safari-engine tests are not needed.
 
 ## Next action
-2Shay: try the private artifact copy on a real phone, then say whether to publish this repo (public or private).
+Complete. Optional for 2Shay: try it on a real phone (the private artifact copy is the quickest way), and switch on
+GitHub Pages if a play-by-link address is wanted.
