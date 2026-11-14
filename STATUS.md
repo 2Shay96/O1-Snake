@@ -26,6 +26,9 @@ Done: phone layout and touch fixes, an automated check, a public README, the MIT
   Engine check: 200 of 200 autopilot games filled the board, about 42,600 moves per game.
 - `README.md` rewritten for outsiders; `LICENSE` is MIT (2Shay asked for open source; MIT was Claude's pick);
   the private artifact link moved out of the repo into the workspace `PROJECTS.md`.
+- The autopilot idea is credited in the README to John Tapsell's 2015 write-up (found by web search on 14 Nov 2026).
+- Inside the artifact host the page can run under a phone's notch and bars. Checked in Chrome with emulated insets
+  (393 x 852 upright, 852 x 393 sideways): board and pad stay clear of them.
 - The private claude.ai artifact copy was refreshed with this version on 14 Nov 2026, so 2Shay can try it on a real phone.
 - Unused template folders (`assets/`, `src/`) and two `.gitkeep` files were moved to `_to_delete/`.
 

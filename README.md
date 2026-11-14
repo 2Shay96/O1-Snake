@@ -53,6 +53,10 @@ Press **Run benchmark** on the page to measure your own machine.)
 It is a fixed rule, not a learning AI. Stopping the shortcuts at half full was tested against keeping them to the end:
 about 42,600 moves to fill the board instead of about 79,000.
 
+The idea is not new. John Tapsell described a loop through every cell with safe shortcuts, switched off once the board
+is half full, in [Nokia 6110 Part 3 – Algorithms](https://johnflux.com/2015/05/02/nokia-6110-part-3-algorithms/) (2015).
+The code here was written from scratch.
+
 ## On a phone
 
 ![The same page on a phone-sized screen, upright and sideways](docs/phone.png)

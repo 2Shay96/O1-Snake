@@ -33,6 +33,8 @@ The check is Chrome's phone emulation. It is not a real phone, Safari or Firefox
 ## The private artifact copy
 2Shay also keeps a private claude.ai artifact copy of this page. Its link is in the workspace `PROJECTS.md`, not here.
 The `window.claude?.hot` lines at the end of `index.html` only matter there: they keep the game going across live updates.
+The `claude:viewport-fit-sides` meta tag and the `env(safe-area-inset-*)` values in the CSS are also for that host, where
+the page can run under a phone's notch and bars. In an ordinary browser tab those insets are zero and change nothing.
 To refresh that copy after editing, drop the first 4 lines (doctype, `<html>`, the two `<meta>` tags) and the final
 `</html>` line, because the artifact host adds its own document wrapper:
 ```powershell
