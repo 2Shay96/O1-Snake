@@ -1,0 +1,652 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>O(1) Snake</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Instrument+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Silkscreen&display=swap">
+<style>
+/* Layout: a handheld unit with the LCD board as the hero; a spec-sheet readout sits beside it and drops below on phones */
+:root{
+  --bg:#E2E5DF;
+  --shell:#F4F5F1;
+  --ink:#1C2019;
+  --muted:#5D6559;
+  --line:#C8CDC2;
+  --led:#D46F17;
+  --bezel:#2A3027;
+  --lcd:#AEBA99;
+  --lcd-ink:#27311F;
+  --lcd-head:#0E130B;
+  --lcd-ghost:rgba(39,49,31,.075);
+  --lcd-veil:rgba(174,186,153,.88);
+  --f-display:"Silkscreen",ui-monospace,"Cascadia Mono",Consolas,monospace;
+  --f-body:"Instrument Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-data:"JetBrains Mono",ui-monospace,"Cascadia Mono",Consolas,monospace;
+  /* height taken by a phone's system bars when the page runs edge to edge (zero in an ordinary browser tab) */
+  --safe-y:calc(env(safe-area-inset-top,0px) + env(safe-area-inset-bottom,0px));
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#10120F;--shell:#191C17;--ink:#E0E4DA;--muted:#949C8E;--line:#2E3329;--led:#EF8A33;--bezel:#0A0C09;
+  --lcd:#98A484;--lcd-veil:rgba(152,164,132,.9);color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#10120F;--shell:#191C17;--ink:#E0E4DA;--muted:#949C8E;--line:#2E3329;--led:#EF8A33;--bezel:#0A0C09;
+  --lcd:#98A484;--lcd-veil:rgba(152,164,132,.9);color-scheme:dark}
+
+*,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 15px/1.5 var(--f-body);-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit}
+button,.screen{-webkit-tap-highlight-color:transparent}
+:focus-visible{outline:2px solid var(--led);outline-offset:2px}
+
+.app{max-width:1120px;margin:0 auto;padding-inline:16px;padding-block:16px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));
+  display:flex;justify-content:center;align-items:flex-start;gap:28px}
+
+/* the handheld: its width is set from the viewport height so the square board always fits on screen */
+.unit{flex:0 1 calc(100vh - 90px);flex-basis:min(calc(100dvh - 90px),760px);min-width:0;position:sticky;top:16px;
+  display:flex;flex-direction:column;gap:12px;background:var(--shell);
+  border:1px solid var(--line);border-radius:22px;padding:14px 18px 18px}
+.brand{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding-inline:4px}
+.brand b{font:400 18px/1 var(--f-display);letter-spacing:.06em}
+.brand span{font:400 11px/1 var(--f-data);color:var(--muted);letter-spacing:.08em;text-transform:uppercase;white-space:nowrap}
+.bezel{display:flex;background:var(--bezel);border-radius:12px;padding:14px}
+.glass{flex:1;min-width:0;display:flex;flex-direction:column;gap:8px;background:var(--lcd);border-radius:4px;
+  padding:10px 12px 12px;box-shadow:inset 0 2px 8px rgba(0,0,0,.28);container-type:inline-size}
+.lcd-top{display:flex;justify-content:space-between;gap:8px;color:var(--lcd-ink);white-space:nowrap;
+  font:400 clamp(10px,3.1cqi,15px)/1 var(--f-display);letter-spacing:.04em;font-variant-numeric:tabular-nums}
+.screen{width:100%;aspect-ratio:1;display:grid;place-items:center;overflow:hidden;touch-action:none;
+  user-select:none;-webkit-user-select:none;container-type:inline-size;cursor:pointer}
+.lcd{position:relative;line-height:0;padding:3px;border:2px solid var(--lcd-ink)}
+canvas{display:block}
+.ov{position:absolute;inset:0;display:grid;place-content:center;gap:12px;padding:16px;text-align:center;
+  background:var(--lcd-veil);color:var(--lcd-ink);line-height:1}
+.ov-big{margin:0;font:400 clamp(18px,6.5cqi,42px)/1 var(--f-display);letter-spacing:.04em;text-wrap:balance}
+.ov-small{margin:0;font:500 clamp(10px,3.4cqi,14px)/1.7 var(--f-data);white-space:pre-line}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}
+.dead canvas{animation:blink .3s step-end 4}
+
+/* the pad is only as wide as its buttons, so a finger beside it still scrolls the page */
+.dpad{display:none;align-self:center;grid-template-columns:repeat(3,64px);grid-template-rows:repeat(3,54px);gap:6px;
+  touch-action:none;user-select:none;-webkit-user-select:none}
+.dpad button{display:grid;place-items:center;border:1px solid var(--line);background:var(--bg);border-radius:14px;cursor:pointer}
+.dpad button:active{background:var(--line)}
+.dpad svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2.5;stroke-linecap:round;stroke-linejoin:round}
+.dpad [data-d="0"]{grid-area:1/2}.dpad [data-d="3"]{grid-area:2/1}.dpad .mid{grid-area:2/2}
+.dpad [data-d="1"]{grid-area:2/3}.dpad [data-d="2"]{grid-area:3/2}
+.dpad [data-d="1"] svg{transform:rotate(90deg)}.dpad [data-d="2"] svg{transform:rotate(180deg)}.dpad [data-d="3"] svg{transform:rotate(-90deg)}
+.dpad .aux{grid-area:1/3;align-content:center;gap:7px;font:400 10px/1 var(--f-display);letter-spacing:.06em}
+.bars{width:14px;height:16px;border-inline:4px solid currentColor}
+@media (pointer:coarse){
+  .dpad{display:grid}
+  .unit{flex-basis:calc(100vh - 280px);flex-basis:min(calc(100dvh - 280px),760px)}
+  .btn,.seg button{min-height:44px}
+}
+
+/* the spec sheet */
+.panel{flex:0 0 320px;min-width:0;display:flex;flex-direction:column;gap:26px;padding-block:6px 16px}
+h1{margin:0;font:400 34px/1.05 var(--f-display);letter-spacing:.02em;text-wrap:balance}
+.lede{margin:10px 0 0;color:var(--muted);max-width:38ch}
+h2{margin:0 0 10px;font:600 11px/1 var(--f-body);letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+.row{display:flex;flex-wrap:wrap;gap:8px}
+.btn{display:inline-flex;align-items:center;gap:9px;padding:9px 14px;border:1px solid var(--line);border-radius:8px;
+  background:var(--shell);font:500 14px/1 var(--f-body);cursor:pointer}
+.btn:hover:not(:disabled){border-color:var(--muted)}
+.btn:disabled{opacity:.5;cursor:default}
+.led{width:8px;height:8px;border-radius:50%;background:var(--line);transition:background .15s,box-shadow .15s}
+.toggle[aria-pressed="true"] .led{background:var(--led);box-shadow:0 0 8px var(--led)}
+.note{margin:10px 0 0;font-size:13px;color:var(--muted);min-height:1.5em}
+.seg{display:grid;grid-template-columns:repeat(5,1fr);gap:6px}
+.seg button{padding:9px 0;border:1px solid var(--line);border-radius:6px;background:transparent;
+  font:500 13px/1 var(--f-data);cursor:pointer}
+.seg button:hover{border-color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--ink);border-color:var(--ink);color:var(--shell)}
+.read{display:grid;grid-template-columns:1fr 1fr;gap:14px 18px;margin:0}
+.read dt{font-size:12px;color:var(--muted)}
+.read dd{margin:3px 0 0;font:500 19px/1.2 var(--f-data);font-variant-numeric:tabular-nums}
+.fine{margin:12px 0 0;font-size:13px;color:var(--muted);max-width:42ch}
+.bench-out{display:block;margin-top:12px;font:400 13px/1.65 var(--f-data);white-space:pre-line;font-variant-numeric:tabular-nums}
+.keys{list-style:none;margin:0;padding:0;display:grid;gap:8px;font-size:13px}
+.keys li{display:flex;justify-content:space-between;gap:12px;border-bottom:1px solid var(--line);padding-bottom:8px}
+.keys li span:last-child{color:var(--muted);text-align:right}
+kbd{display:inline-block;min-width:1.7em;padding:2px 5px;margin-right:3px;border:1px solid var(--line);border-bottom-width:2px;
+  border-radius:4px;font:500 11px/1.3 var(--f-data);text-align:center;background:var(--shell)}
+
+/* narrow screens: the unit sits above the spec sheet. The board's width is capped by the screen height,
+   so the board (and on touch screens the pad under it) is all on the first screen. */
+@media (max-width:760px){
+  .app{flex-direction:column;align-items:stretch}
+  .unit{flex:none;position:static;padding:12px 12px 16px}
+  .bezel{padding:10px;align-self:center;width:100%;max-width:calc(100vh - 98px);max-width:max(220px,calc(100svh - 98px - var(--safe-y)))}
+  .panel{flex:none}
+}
+@media (max-width:760px) and (pointer:coarse){
+  .bezel{max-width:calc(100vh - 284px);max-width:max(220px,calc(100svh - 284px - var(--safe-y)))}
+}
+/* a short upright screen (a small phone, or split screen): drop the name plate and flatten the pad to keep the board big */
+@media (max-width:760px) and (pointer:coarse) and (orientation:portrait) and (max-height:520px){
+  .brand{display:none}
+  .dpad{grid-template-rows:repeat(3,44px)}
+  .bezel{max-width:calc(100vh - 206px);max-width:max(200px,calc(100svh - 206px - var(--safe-y)))}
+}
+/* a phone held sideways: board on the left, pad on the right, like a handheld */
+@media (pointer:coarse) and (orientation:landscape) and (max-height:560px){
+  .app{flex-direction:column;align-items:center;padding-block:8px}
+  .unit{flex:none;position:static;display:grid;grid-template-columns:auto auto;align-items:center;gap:22px;padding:10px 22px}
+  .brand{display:none}
+  .bezel{padding:10px;width:calc(100vh - 62px);width:max(200px,calc(100svh - 62px - var(--safe-y)));max-width:calc(100vw - 304px)}
+  .panel{flex:none;align-self:center;width:100%;max-width:560px}
+}
+@media (prefers-reduced-motion:reduce){.dead canvas{animation:none}.led{transition:none}}
+</style>
+
+<main class="app">
+  <section class="unit" aria-label="Game">
+    <div class="brand"><b>O(1)</b><span>24 &times; 24 &middot; 576 cells</span></div>
+    <div class="bezel">
+      <div class="glass">
+        <div class="lcd-top" aria-live="off"><span id="score">0000</span><span id="tag">L5</span><span id="hi">HI 0000</span></div>
+        <div class="screen" id="screen">
+          <div class="lcd" id="lcd">
+            <canvas id="cv" width="240" height="240" role="img" aria-label="Snake board, 24 by 24 cells"></canvas>
+            <div class="ov" id="ov">
+              <p class="ov-big" id="ovBig">READY</p>
+              <p class="ov-small" id="ovSmall">Arrow keys or swipe to start
+Q hands over to autopilot</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="dpad" id="dpad">
+      <button type="button" data-d="0" aria-label="Up"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button>
+      <button type="button" class="aux toggle" id="autoPad" aria-pressed="false" aria-label="Autopilot"><span class="led" aria-hidden="true"></span>AUTO</button>
+      <button type="button" data-d="3" aria-label="Left"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button>
+      <button type="button" class="mid" aria-label="Start, pause or resume"><span class="bars"></span></button>
+      <button type="button" data-d="1" aria-label="Right"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button>
+      <button type="button" data-d="2" aria-label="Down"><svg viewBox="0 0 24 24"><path d="M6 15l6-6 6 6"/></svg></button>
+    </div>
+  </section>
+
+  <aside class="panel">
+    <header>
+      <h1>O(1) Snake</h1>
+      <p class="lede">Every move costs the same, however long the snake gets: one table lookup to find the next cell, a few writes to fixed arrays, no memory allocated, and at most three cells redrawn.</p>
+    </header>
+
+    <section>
+      <h2>Play</h2>
+      <div class="row">
+        <button type="button" class="btn toggle" id="autoBtn" aria-pressed="false" title="Autopilot (Q)"><span class="led" aria-hidden="true"></span>Autopilot</button>
+        <button type="button" class="btn" id="pauseBtn" title="Start or pause (Space)">Start</button>
+        <button type="button" class="btn" id="newBtn" title="New game (Enter)">New game</button>
+      </div>
+      <p class="note" id="note" aria-live="polite">Autopilot follows one loop through all 576 cells and cuts corners while the board is less than half full. It never crashes.</p>
+    </section>
+
+    <section>
+      <h2 id="lvLabel">Level</h2>
+      <div class="seg" id="levels" role="group" aria-labelledby="lvLabel">
+        <button type="button" aria-pressed="false">1</button><button type="button" aria-pressed="false">2</button>
+        <button type="button" aria-pressed="false">3</button><button type="button" aria-pressed="false">4</button>
+        <button type="button" aria-pressed="true">5</button><button type="button" aria-pressed="false">6</button>
+        <button type="button" aria-pressed="false">7</button><button type="button" aria-pressed="false">8</button>
+        <button type="button" aria-pressed="false">9</button><button type="button" aria-pressed="false">MAX</button>
+      </div>
+    </section>
+
+    <section>
+      <h2>Live readout</h2>
+      <dl class="read">
+        <div><dt>Length</dt><dd id="rLen">3 / 576</dd></div>
+        <div><dt>Moves</dt><dd id="rMoves">0</dd></div>
+        <div><dt>Path efficiency</dt><dd id="rEff">&mdash;</dd></div>
+        <div><dt>Moves per apple</dt><dd id="rMpa">&mdash;</dd></div>
+        <div><dt>Cells redrawn per move</dt><dd id="rDraw">&mdash;</dd></div>
+        <div><dt>Time</dt><dd id="rTime">0.0 s</dd></div>
+      </dl>
+      <p class="fine">Path efficiency divides the shortest possible route to each apple by the moves actually taken. 100% means no wasted steps.</p>
+    </section>
+
+    <section>
+      <h2>Benchmark</h2>
+      <button type="button" class="btn" id="benchBtn">Run benchmark</button>
+      <p class="fine">Plays 10 complete autopilot games off-screen and times the moves.</p>
+      <output class="bench-out" id="benchOut" for="benchBtn"></output>
+    </section>
+
+    <section>
+      <h2>Keys</h2>
+      <ul class="keys">
+        <li><span><kbd>&larr;</kbd><kbd>&uarr;</kbd><kbd>&darr;</kbd><kbd>&rarr;</kbd> <kbd>WASD</kbd></span><span>Steer, or swipe</span></li>
+        <li><span><kbd>Space</kbd></span><span>Start, pause, resume</span></li>
+        <li><span><kbd>Q</kbd></span><span>Autopilot on or off</span></li>
+        <li><span><kbd>1</kbd>&ndash;<kbd>9</kbd> <kbd>0</kbd></span><span>Level, 0 for MAX</span></li>
+        <li><span><kbd>Enter</kbd></span><span>New game</span></li>
+      </ul>
+    </section>
+  </aside>
+</main>
+
+<script>
+(() => {
+'use strict';
+
+// ---- Engine: all state lives in fixed-size typed arrays, so a move never searches or allocates ----
+const MOVED = 0, ATE = 1, DIED = 2, WON = 3;
+const UP = 0, RIGHT = 1, DOWN = 2, LEFT = 3;  // d ^ 2 is the reverse of d
+
+class Snake {
+  constructor(w, h) {
+    const n = w * h;
+    this.w = w; this.n = n;
+    this.nb = new Int32Array(n * 4);  // neighbour of cell c in direction d at [c*4+d], -1 past a wall
+    this.ord = new Int32Array(n);     // each cell's position on one loop through every cell (the autopilot route)
+    this.body = new Int32Array(n);    // ring buffer of body cells, tail at tp, head at hp
+    this.occ = new Uint8Array(n);     // 1 where the body is
+    this.free = new Int32Array(n);    // the empty cells, unordered...
+    this.slot = new Int32Array(n);    // ...and each cell's index in that list: O(1) add, remove and random pick
+    this.dirty = new Uint8Array(n);   // cells changed since the last paint
+    this.dl = new Int32Array(n);
+    this.nd = 0;
+    for (let c = 0; c < n; c++) {
+      const x = c % w, y = (c / w) | 0;
+      this.nb[c * 4 + UP] = y > 0 ? c - w : -1;
+      this.nb[c * 4 + RIGHT] = x < w - 1 ? c + 1 : -1;
+      this.nb[c * 4 + DOWN] = y < h - 1 ? c + w : -1;
+      this.nb[c * 4 + LEFT] = x > 0 ? c - 1 : -1;
+    }
+    // The loop (h must be even): along row 0, snake through columns 1..w-1 of every other row, back up column 0.
+    let k = 0;
+    for (let x = 0; x < w; x++) this.ord[x] = k++;
+    for (let y = 1; y < h; y++)
+      if (y & 1) for (let x = w - 1; x > 0; x--) this.ord[y * w + x] = k++;
+      else for (let x = 1; x < w; x++) this.ord[y * w + x] = k++;
+    for (let y = h - 1; y > 0; y--) this.ord[y * w] = k++;
+    this.reset();
+  }
+  clear() {
+    this.occ.fill(0);
+    for (let c = 0; c < this.n; c++) this.free[c] = this.slot[c] = c;
+    this.nFree = this.n; this.tp = 0; this.hp = -1; this.len = 0;
+    this.dir = RIGHT; this.food = -1; this.won = false;
+    this.moves = this.ideal = this.spent = this.seg = this.dist = 0;
+  }
+  reset() {
+    this.clear();
+    const y = ((this.n / this.w) >> 1) & ~1;  // an even row, where the loop runs left to right
+    for (let x = 3; x < 6; x++) this.push(y * this.w + x);
+    this.spawn();
+    this.markAll();
+  }
+  load(s) {  // restore a snapshot (used when the page hot-reloads)
+    this.clear();
+    for (const c of s.cells) {
+      if (c !== (c | 0) || c < 0 || c >= this.n || this.occ[c]) throw new Error('bad snapshot');
+      this.push(c);
+    }
+    if (this.len < 3) throw new Error('bad snapshot');
+    this.dir = s.dir & 3; this.moves = s.moves | 0; this.ideal = s.ideal | 0; this.spent = s.spent | 0;
+    if (s.food >= 0 && s.food < this.n && !this.occ[s.food]) {
+      this.food = s.food; this.seg = s.seg | 0; this.dist = s.dist | 0;
+    } else this.spawn();
+    this.markAll();
+  }
+  take(c) { const i = this.slot[c], last = this.free[--this.nFree]; this.free[i] = last; this.slot[last] = i; }
+  give(c) { this.slot[c] = this.nFree; this.free[this.nFree++] = c; }
+  mark(c) { if (!this.dirty[c]) { this.dirty[c] = 1; this.dl[this.nd++] = c; } }
+  markAll() { for (let c = 0; c < this.n; c++) this.mark(c); }
+  push(c) {
+    this.hp = this.hp + 1 === this.n ? 0 : this.hp + 1;
+    this.body[this.hp] = c; this.occ[c] = 1; this.len++;
+    this.take(c); this.mark(c);
+  }
+  pop() {
+    const t = this.body[this.tp];
+    this.tp = this.tp + 1 === this.n ? 0 : this.tp + 1;
+    this.occ[t] = 0; this.len--;
+    this.give(t); this.mark(t);
+  }
+  spawn() {
+    const w = this.w, h = this.body[this.hp], f = this.free[(Math.random() * this.nFree) | 0];
+    this.food = f; this.seg = 0;
+    this.dist = Math.abs(f % w - h % w) + Math.abs(((f / w) | 0) - ((h / w) | 0));
+    this.mark(f);
+  }
+  step(d) {
+    const h = this.body[this.hp], c = this.nb[h * 4 + d];
+    if (c < 0 || (this.occ[c] && c !== this.body[this.tp])) return DIED;  // the tail cell is fine: it moves away first
+    const ate = c === this.food;
+    this.dir = d; this.moves++; this.seg++;
+    if (!ate) this.pop();
+    this.mark(h);  // old head is redrawn as body
+    this.push(c);
+    if (!ate) return MOVED;
+    this.ideal += this.dist; this.spent += this.seg;
+    if (this.nFree === 0) { this.food = -1; this.won = true; return WON; }
+    this.spawn();
+    return ATE;
+  }
+  gap(a, b) { const d = this.ord[b] - this.ord[a]; return d < 0 ? d + this.n : d; }
+  // Autopilot. The body always lies in loop order between tail and head, and the head only ever jumps
+  // forward along the loop to a cell before the tail, so the next loop cell is always open: it can't crash.
+  // Within that rule it takes the longest jump that doesn't overshoot the apple, until the board is half
+  // full; after that, shortcuts leave gaps that apples land in, so plain loop-following is faster (tested:
+  // about 42,600 moves to clear the board instead of 79,000).
+  auto() {
+    const h = this.body[this.hp], t = this.body[this.tp];
+    const toTail = this.gap(h, t), toFood = this.gap(h, this.food);
+    const lim = this.nFree * 2 < this.n ? 1 : toFood < toTail ? toFood : toTail;
+    let best = this.dir, far = 0;
+    for (let d = 0; d < 4; d++) {
+      const c = this.nb[h * 4 + d];
+      if (c < 0 || (this.occ[c] && c !== t)) continue;
+      const g = this.gap(h, c);
+      if (g <= lim && g > far) { far = g; best = d; }
+    }
+    return best;
+  }
+  ordered() {  // does the body lie in loop order? (true at the start; usually false after manual turns)
+    const t = this.body[this.tp];
+    for (let i = 1, p = this.tp, prev = 0; i < this.len; i++) {
+      p = p + 1 === this.n ? 0 : p + 1;
+      const g = this.gap(t, this.body[p]);
+      if (g <= prev) return false;
+      prev = g;
+    }
+    return true;
+  }
+}
+
+// ---- Game ----
+const W = 24, H = 24, N = W * H, MAX = 10;
+const IV = [0, 300, 234, 183, 142, 111, 87, 68, 53, 41, 0.5];  // ms per move by level; MAX (2,000 a second) lets you watch autopilot clear the board in about 20 s
+const g = new Snake(W, H);
+window.O1Snake = { Snake, W, H, game: g,  // for tests/: the engine class, the live game, and read-only views of the UI state
+  get state() { return state; }, get auto() { return auto; }, get level() { return level; } };
+
+const $ = id => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d', { alpha: false });
+const screenEl = $('screen'), lcdEl = $('lcd'), ovEl = $('ov'), ovBig = $('ovBig'), ovSmall = $('ovSmall');
+const scoreEl = $('score'), hiEl = $('hi'), tagEl = $('tag'), noteEl = $('note');
+const autoBtn = $('autoBtn'), autoPad = $('autoPad'), pauseBtn = $('pauseBtn');
+const touch = matchMedia('(pointer:coarse)');  // on a touch screen the hints talk about taps, not keys
+const T = (keys, taps) => touch.matches ? taps : keys;
+const R = { len: $('rLen'), moves: $('rMoves'), eff: $('rEff'), mpa: $('rMpa'), draw: $('rDraw'), time: $('rTime') };
+const lvBtns = Array.from(document.querySelectorAll('#levels button'));
+
+let state = 'ready', auto = false, level = 5, best = 0;
+let cs = 0, gp = 0, dpr = 0, raf = 0, last = 0, acc = 0;
+let lcdC = '#AEBA99', inkC = '#27311F', headC = '#0E130B', ghostC = 'rgba(39,49,31,.075)';
+const q = new Int8Array(4); let qh = 0, qn = 0;  // up to 3 queued turns, so quick double-taps register
+let drawn = 0, drawnMoves = 0, runMs = 0, shown = -1, readAt = 0, noteTimer = 0;
+
+const fmt = n => n.toLocaleString('en-US');
+const pad = n => String(n).padStart(4, '0');
+const eff = () => g.spent ? Math.round(100 * g.ideal / g.spent) + '%' : '—';
+const clock = ms => { const s = ms / 1000; return s < 60 ? s.toFixed(1) + ' s' : Math.floor(s / 60) + ':' + String(Math.floor(s % 60)).padStart(2, '0'); };
+function get(k) { try { return localStorage.getItem('o1snake.' + k); } catch (e) { return null; } }
+function put(k, v) { try { localStorage.setItem('o1snake.' + k, String(v)); } catch (e) {} }
+
+function colors() {
+  const s = getComputedStyle(document.documentElement), v = k => s.getPropertyValue(k).trim();
+  lcdC = v('--lcd') || lcdC; inkC = v('--lcd-ink') || inkC; headC = v('--lcd-head') || headC; ghostC = v('--lcd-ghost') || ghostC;
+}
+
+function fit() {
+  const r = screenEl.getBoundingClientRect(), d = window.devicePixelRatio || 1;
+  const px = Math.max(2, Math.floor((Math.min(r.width, r.height) - 10) * d / W));  // 10 = the wall's border and padding
+  if (px === cs && d === dpr) return;
+  cs = px; dpr = d; gp = Math.max(1, Math.round(cs * 0.08));
+  cv.width = cv.height = cs * W;
+  cv.style.width = cv.style.height = (cs * W / d) + 'px';
+  g.markAll(); paint();
+}
+
+// Paint only the cells the engine marked dirty: normally three per move, never more than the board.
+function paint() {
+  const n = g.nd, dl = g.dl, dirty = g.dirty, occ = g.occ, f = g.food, h = g.body[g.hp];
+  const sz = cs - 2 * gp, ring = Math.max(1, Math.round(sz * 0.24));
+  for (let i = 0; i < n; i++) {
+    const c = dl[i], x = (c % W) * cs, y = ((c / W) | 0) * cs;
+    dirty[c] = 0;
+    ctx.fillStyle = lcdC; ctx.fillRect(x, y, cs, cs);
+    if (c === f) {
+      ctx.fillStyle = inkC; ctx.fillRect(x + gp, y + gp, sz, sz);
+      ctx.fillStyle = lcdC; ctx.fillRect(x + gp + ring, y + gp + ring, sz - 2 * ring, sz - 2 * ring);
+    } else {
+      ctx.fillStyle = c === h ? headC : occ[c] ? inkC : ghostC;
+      ctx.fillRect(x + gp, y + gp, sz, sz);
+    }
+  }
+  g.nd = 0;
+  return n;
+}
+
+function hud(force) {
+  const s = g.len - 3;
+  if (s !== shown) {
+    shown = s; scoreEl.textContent = pad(s);
+    if (s > best) { best = s; hiEl.textContent = 'HI ' + pad(best); }
+  }
+  const now = performance.now();
+  if (!force && now - readAt < 250) return;  // the DOM readout updates 4 times a second, not every move
+  readAt = now;
+  R.len.textContent = g.len + ' / ' + N;
+  R.moves.textContent = fmt(g.moves);
+  R.eff.textContent = eff();
+  R.mpa.textContent = s ? (g.spent / s).toFixed(1) : '—';
+  R.draw.textContent = drawnMoves ? (drawn / drawnMoves).toFixed(2) : '—';
+  R.time.textContent = clock(runMs);
+}
+
+function show(big, small) { ovBig.textContent = big; ovSmall.textContent = small; ovEl.hidden = false; }
+function note(text) {
+  noteEl.textContent = text;
+  clearTimeout(noteTimer); noteTimer = setTimeout(() => { noteEl.textContent = ''; }, 6000);
+}
+function setState(s) {
+  state = s;
+  pauseBtn.textContent = s === 'run' ? 'Pause' : s === 'pause' ? 'Resume' : 'Start';
+  pauseBtn.disabled = s === 'over' || s === 'won';
+}
+function sync() {
+  autoBtn.setAttribute('aria-pressed', String(auto)); autoPad.setAttribute('aria-pressed', String(auto));
+  tagEl.textContent = (auto ? 'AUTO ' : '') + (level === MAX ? 'MAX' : 'L' + level);
+}
+
+function next() {
+  if (auto) return g.auto();
+  if (!qn) return g.dir;
+  const d = q[qh]; qh = (qh + 1) & 3; qn--;
+  return d;
+}
+function tick() {
+  const r = g.step(next());
+  if (r <= ATE) return true;
+  end(r === WON);
+  return false;
+}
+function frame(now) {
+  raf = 0;
+  if (state !== 'run') return;
+  const dt = Math.min(Math.max(now - last, 0), 250);
+  last = now; runMs += dt;
+  const before = g.moves, iv = IV[level];
+  acc += dt;
+  for (let i = 0; acc >= iv && i < 64; i++) { acc -= iv; if (!tick()) break; }
+  if (acc > iv * 2) acc = iv;
+  const moved = g.moves - before, n = paint();
+  if (moved) { drawn += n; drawnMoves += moved; }
+  hud(false);
+  if (state === 'run') raf = requestAnimationFrame(frame);
+}
+
+function go() {
+  setState('run'); ovEl.hidden = true;
+  acc = IV[level]; last = performance.now();  // first move on the next frame
+  if (!raf) raf = requestAnimationFrame(frame);
+}
+function pause() {
+  if (state !== 'run') return;
+  setState('pause'); show('PAUSED', T('Space or tap to resume', 'Tap to resume'));
+}
+function restart() {
+  g.reset(); qh = qn = 0; runMs = drawn = drawnMoves = 0; shown = -1;
+  lcdEl.classList.remove('dead');
+  setState('ready'); paint(); hud(true);
+  if (auto) go();
+  else show('READY', T('Arrow keys or swipe to start\nQ hands over to autopilot', 'Swipe or tap to start\nAUTO hands over to autopilot'));
+}
+function end(won) {
+  runMs += Math.max(performance.now() - last, 0);
+  setState(won ? 'won' : 'over');
+  hud(true); put('best', best);
+  if (!won) { lcdEl.classList.remove('dead'); void lcdEl.offsetWidth; lcdEl.classList.add('dead'); }
+  show(won ? 'BOARD CLEARED' : 'GAME OVER',
+    fmt(g.len - 3) + ' apples, ' + fmt(g.moves) + ' moves\n' +
+    (g.spent ? eff() + ' path efficiency\n' : '') + T('Enter or tap for a new game', 'Tap for a new game'));
+}
+function primary() {
+  if (state === 'run') pause();
+  else if (state === 'over' || state === 'won') restart();
+  else go();
+}
+function steer(d) {
+  if (state === 'over' || state === 'won') return;
+  if (auto) { auto = false; sync(); note('You have the controls. ' + T('Q', 'AUTO') + ' gives them back to autopilot.'); }
+  const prev = qn ? q[(qh + qn - 1) & 3] : g.dir;
+  if (d !== prev && d !== (prev ^ 2) && qn < 3) q[(qh + qn++) & 3] = d;
+  if (state !== 'run') go();
+}
+function toggleAuto() {
+  auto = !auto; qh = qn = 0; sync();
+  if (!auto) return;
+  if (state === 'over' || state === 'won') return restart();
+  if (!g.ordered()) {
+    note('Autopilot can only take over a snake lying along its route, so it started a new game.');
+    return restart();
+  }
+  if (state !== 'run') go();
+}
+function setLevel(L) {
+  level = L;
+  lvBtns.forEach((b, i) => b.setAttribute('aria-pressed', String(i + 1 === L)));
+  sync(); put('level', L);
+}
+
+function bench() {
+  const btn = $('benchBtn'), out = $('benchOut');
+  btn.disabled = true; out.textContent = 'Running…';
+  setTimeout(() => {
+    const b = new Snake(W, H), games = 10, cap = N * N;
+    let moves = 0, cleared = 0;
+    const t0 = performance.now();
+    for (let i = 0; i < games; i++) {
+      b.reset();
+      let r = MOVED;
+      while (r <= ATE && b.moves < cap) r = b.step(b.auto());
+      moves += b.moves; if (r === WON) cleared++;
+    }
+    const ms = Math.max(performance.now() - t0, 0.001);
+    out.textContent = cleared + ' of ' + games + ' boards cleared\n' +
+      fmt(moves) + ' moves in ' + ms.toFixed(1) + ' ms\n' +
+      (moves / ms / 1000).toFixed(1) + ' million moves per second, ' + Math.round(ms * 1e6 / moves) + ' ns each';
+    btn.disabled = false;
+  }, 30);
+}
+
+// ---- Input ----
+const KEY = { ArrowUp: UP, KeyW: UP, ArrowRight: RIGHT, KeyD: RIGHT, ArrowDown: DOWN, KeyS: DOWN, ArrowLeft: LEFT, KeyA: LEFT };
+addEventListener('keydown', e => {
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  const k = e.code, d = KEY[k];
+  if (d !== undefined) { e.preventDefault(); steer(d); return; }
+  let kbButton = false;  // a button reached with the keyboard keeps Space and Enter for itself
+  try { kbButton = e.target.matches('button:focus-visible'); } catch (err) {}
+  if (k === 'Space') { if (kbButton) return; e.preventDefault(); primary(); }
+  else if (k === 'Enter' || k === 'NumpadEnter') { if (kbButton) return; e.preventDefault(); restart(); }
+  else if (k === 'KeyQ') toggleAuto();
+  else if (/^(Digit|Numpad)\d$/.test(k)) { const n = +k.slice(-1); setLevel(n || MAX); }
+});
+
+// One finger steers. pid is the pointer being followed (-1 for none); a second finger landing on the board is
+// ignored, and a new first finger (or the mouse) always takes over, so a missed "finger up" cannot lock the controls.
+let px0 = 0, py0 = 0, pid = -1, swiped = false;
+screenEl.addEventListener('pointerdown', e => {
+  if (pid !== -1 && !e.isPrimary) return;
+  pid = e.pointerId; swiped = false; px0 = e.clientX; py0 = e.clientY;
+  try { screenEl.setPointerCapture(pid); } catch (err) {}
+});
+screenEl.addEventListener('pointermove', e => {
+  if (e.pointerId !== pid) return;
+  const dx = e.clientX - px0, dy = e.clientY - py0;
+  if (dx * dx + dy * dy < 576) return;  // 24 px of travel makes a swipe
+  steer(Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? RIGHT : LEFT) : (dy > 0 ? DOWN : UP));
+  px0 = e.clientX; py0 = e.clientY; swiped = true;
+});
+screenEl.addEventListener('pointerup', e => {
+  if (e.pointerId !== pid) return;
+  pid = -1;
+  if (!swiped && state !== 'run') primary();
+});
+screenEl.addEventListener('pointercancel', e => { if (e.pointerId === pid) pid = -1; });
+
+const dpadAct = b => { if (b.dataset.d) steer(+b.dataset.d); else if (b === autoPad) toggleAuto(); else primary(); };
+$('dpad').addEventListener('pointerdown', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  e.preventDefault(); dpadAct(b);
+});
+$('dpad').addEventListener('click', e => {  // keyboard activation only; taps were handled on pointerdown
+  const b = e.target.closest('button'); if (b && e.detail === 0) dpadAct(b);
+});
+
+autoBtn.addEventListener('click', toggleAuto);
+pauseBtn.addEventListener('click', primary);
+$('newBtn').addEventListener('click', restart);
+$('benchBtn').addEventListener('click', bench);
+lvBtns.forEach((b, i) => b.addEventListener('click', () => setLevel(i + 1)));
+
+const retheme = () => { colors(); g.markAll(); paint(); };
+try { matchMedia('(prefers-color-scheme: dark)').addEventListener('change', retheme); } catch (err) {}
+new MutationObserver(retheme).observe(document.documentElement, { attributes: true, attributeFilter: ['data-theme'] });
+document.addEventListener('visibilitychange', () => { if (document.hidden && state === 'run' && !auto) pause(); });
+addEventListener('pagehide', () => put('best', best));
+
+// ---- Boot, keeping the game across live page updates ----
+try {
+  window.claude?.hot?.snapshot?.(() => {
+    const cells = [];
+    for (let i = 0, p = g.tp; i < g.len; i++, p = p + 1 === N ? 0 : p + 1) cells.push(g.body[p]);
+    return { cells, dir: g.dir, food: g.food, seg: g.seg, dist: g.dist, moves: g.moves, ideal: g.ideal,
+      spent: g.spent, auto, level, runMs, live: state === 'run' || state === 'pause' };
+  });
+} catch (err) {}
+
+function boot(data) {
+  best = +get('best') || 0;
+  const L = +get('level');
+  level = L >= 1 && L <= MAX ? L : 5;
+  colors();
+  hiEl.textContent = 'HI ' + pad(best);
+  let resumed = false;
+  if (data && data.live && Array.isArray(data.cells)) {
+    try {
+      g.load(data); auto = !!data.auto; runMs = +data.runMs || 0;
+      if (data.level >= 1 && data.level <= MAX) level = data.level;
+      resumed = true;
+    } catch (err) { g.reset(); }
+  }
+  setLevel(level);
+  new ResizeObserver(fit).observe(screenEl);
+  fit();
+  if (resumed) { setState('pause'); paint(); hud(true); show('PAUSED', T('Space or tap to resume', 'Tap to resume')); }
+  else restart();
+}
+window.claude?.hot?.ready ? window.claude.hot.ready(boot) : boot(window.claude?.hot?.data ?? {});
+})();
+</script>
+</html>
